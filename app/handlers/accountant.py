@@ -32,7 +32,7 @@ def _period_start(label: str) -> str:
 
 
 async def _get_repo(message: Message):
-    return message.bot["repo"]
+    return message.bot.repo
 
 
 async def _ensure_accountant(message: Message, state: FSMContext) -> bool:
@@ -315,7 +315,7 @@ async def export_excel(message: Message, state: FSMContext):
     path = export_to_xlsx(
         headers=["ID", "Что", "Сумма", "Оплачено", "Долг", "Комментарий", "Дата"],
         rows=rows,
-        out_dir=message.bot["exports_dir"],
+        out_dir=message.bot.exports_dir,
         prefix="sales",
     )
     await message.answer_document(document=FSInputFile(path), caption="Экспорт продаж")

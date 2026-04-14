@@ -14,7 +14,7 @@ router = Router()
 
 
 async def _get_repo(message: Message):
-    return message.bot["repo"]
+    return message.bot.repo
 
 
 @router.message(CommandStart())
@@ -22,7 +22,7 @@ async def cmd_start(message: Message, state: FSMContext):
     if message.chat.type != "private":
         return
     repo = await _get_repo(message)
-    settings = message.bot["settings"]
+    settings = message.bot.settings
 
     default_role = roles.ROLE_EMPLOYEE
     if message.from_user and message.from_user.id in settings.director_ids:

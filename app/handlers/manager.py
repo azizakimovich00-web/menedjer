@@ -39,7 +39,7 @@ def _period_start(label: str) -> str:
 
 
 async def _get_repo(message: Message):
-    return message.bot["repo"]
+    return message.bot.repo
 
 
 async def _ensure_manager(message: Message, state: FSMContext) -> bool:
@@ -636,7 +636,7 @@ async def export_excel(message: Message, state: FSMContext):
         path = export_to_xlsx(
             headers=["ID", "Материал ID", "Кол-во", "Тип", "Комментарий", "Дата"],
             rows=body,
-            out_dir=message.bot["exports_dir"],
+            out_dir=message.bot.exports_dir,
             prefix="materials",
         )
         await message.answer_document(document=FSInputFile(path), caption="Экспорт материалов")
@@ -650,7 +650,7 @@ async def export_excel(message: Message, state: FSMContext):
         path = export_to_xlsx(
             headers=["ID", "Сотрудник", "Задача", "Дата", "Статус", "Комментарий", "Создано"],
             rows=body,
-            out_dir=message.bot["exports_dir"],
+            out_dir=message.bot.exports_dir,
             prefix="tasks",
         )
         await message.answer_document(document=FSInputFile(path), caption="Экспорт задач")
@@ -661,7 +661,7 @@ async def export_excel(message: Message, state: FSMContext):
         path = export_to_xlsx(
             headers=["ID", "Имя", "Телефон", "Комментарий", "Создано"],
             rows=body,
-            out_dir=message.bot["exports_dir"],
+            out_dir=message.bot.exports_dir,
             prefix="clients",
         )
         await message.answer_document(document=FSInputFile(path), caption="Экспорт клиентов")
@@ -675,7 +675,7 @@ async def export_excel(message: Message, state: FSMContext):
         path = export_to_xlsx(
             headers=["ID", "Имя", "Телефон", "Статус", "Дедлайн", "Ответственный", "Создано"],
             rows=body,
-            out_dir=message.bot["exports_dir"],
+            out_dir=message.bot.exports_dir,
             prefix="orders",
         )
         await message.answer_document(document=FSInputFile(path), caption="Экспорт заказов")

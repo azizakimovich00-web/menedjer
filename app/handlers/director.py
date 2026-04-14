@@ -28,7 +28,7 @@ def _date_str(dt: datetime) -> str:
 
 
 async def _get_repo(message: Message):
-    return message.bot["repo"]
+    return message.bot.repo
 
 
 async def _ensure_director(message: Message, state: FSMContext) -> bool:
@@ -402,7 +402,7 @@ async def contacts_export(message: Message, state: FSMContext):
     path = export_to_xlsx(
         headers=["ID", "Название", "Телефон", "Категория", "Комментарий", "Создано"],
         rows=body,
-        out_dir=message.bot["exports_dir"],
+        out_dir=message.bot.exports_dir,
         prefix="contacts",
     )
     await message.answer_document(document=FSInputFile(path), caption="Экспорт контактов")

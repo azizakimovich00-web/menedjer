@@ -28,9 +28,9 @@ async def main() -> None:
     repo = Repository(db)
 
     bot = Bot(token=settings.bot_token)
-    bot["repo"] = repo
-    bot["settings"] = settings
-    bot["exports_dir"] = settings.exports_dir
+    bot.repo = repo
+    bot.settings = settings
+    bot.exports_dir = settings.exports_dir
 
     dp = Dispatcher(storage=MemoryStorage())
     from aiogram import F

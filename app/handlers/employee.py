@@ -19,7 +19,7 @@ def _date_str(dt: datetime) -> str:
 
 
 async def _get_repo(message: Message):
-    return message.bot["repo"]
+    return message.bot.repo
 
 
 async def _ensure_employee(message: Message) -> bool:
