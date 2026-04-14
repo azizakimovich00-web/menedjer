@@ -16,14 +16,21 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
 
     settings = load_settings()
-    db = Database(settings.db_path)
+    os.makedirs(settings.exports_dir, exist_ok=True)
+
+    db = Database(
+        settings.database_url,
+        min_pool_size=settings.db_pool_min_size,
+        max_pool_size=settings.db_pool_max_size,
+        connect_retries=settings.db_connect_retries,
+    )
     await init_db(db)
     repo = Repository(db)
 
     bot = Bot(token=settings.bot_token)
     bot["repo"] = repo
     bot["settings"] = settings
-    bot["exports_dir"] = os.path.join(os.getcwd(), "exports")
+    bot["exports_dir"] = settings.exports_dir
 
     dp = Dispatcher(storage=MemoryStorage())
     from aiogram import F

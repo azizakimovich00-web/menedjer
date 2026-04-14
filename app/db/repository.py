@@ -1,9 +1,20 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from datetime import datetime, timedelta
 from typing import Optional
 
 from app.db.database import Database, utcnow_str
+
+ALLOWED_DELETE_TABLES = {
+    "clients",
+    "contacts",
+    "debt_payments",
+    "debts",
+    "expenses",
+    "material_history",
+    "orders",
+    "sales",
+    "tasks",
+}
 
 
 class Repository:
@@ -14,20 +25,28 @@ class Repository:
         return await self.db.fetchone("SELECT * FROM users WHERE tg_id = ?", (tg_id,))
 
     async def create_user(self, tg_id: int, full_name: str, username: str | None, role: str) -> int:
-        await self.db.execute(
-            "INSERT INTO users (tg_id, full_name, username, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        user_id = await self.db.fetchval(
+            """
+            INSERT INTO users (tg_id, full_name, username, role, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            RETURNING id
+            """,
             (tg_id, full_name, username, role, utcnow_str()),
         )
-        row = await self.db.fetchone("SELECT id FROM users WHERE tg_id = ?", (tg_id,))
-        return int(row["id"]) if row else 0
+        return int(user_id or 0)
 
     async def set_role(self, user_id: int, role: str) -> None:
         await self.db.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
 
     async def set_pin(self, user_id: int, pin_hash: str) -> None:
         await self.db.execute(
-            "INSERT INTO pins (user_id, pin_hash, updated_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(user_id) DO UPDATE SET pin_hash=excluded.pin_hash, updated_at=excluded.updated_at",
+            """
+            INSERT INTO pins (user_id, pin_hash, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE
+            SET pin_hash = EXCLUDED.pin_hash,
+                updated_at = EXCLUDED.updated_at
+            """,
             (user_id, pin_hash, utcnow_str()),
         )
 
@@ -35,18 +54,32 @@ class Repository:
         row = await self.db.fetchone("SELECT pin_hash FROM pins WHERE user_id = ?", (user_id,))
         return str(row["pin_hash"]) if row else None
 
-    async def add_sale(self, user_id: int, item: str, total: float, paid: float, debt: float, comment: str | None):
-        await self.db.execute(
-            "INSERT INTO sales (user_id, item, amount_total, amount_paid, amount_debt, comment, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+    async def add_sale(
+        self,
+        user_id: int,
+        item: str,
+        total: float,
+        paid: float,
+        debt: float,
+        comment: str | None,
+    ) -> int:
+        sale_id = await self.db.fetchval(
+            """
+            INSERT INTO sales (user_id, item, amount_total, amount_paid, amount_debt, comment, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """,
             (user_id, item, total, paid, debt, comment, utcnow_str()),
         )
-        if debt > 0:
+        if debt > 0 and sale_id is not None:
             await self.db.execute(
-                "INSERT INTO debts (source_type, source_id, amount_total, amount_left, created_at)"
-                " VALUES (?, last_insert_rowid(), ?, ?, ?)",
-                ("sale", total, debt, utcnow_str()),
+                """
+                INSERT INTO debts (source_type, source_id, amount_total, amount_left, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                ("sale", int(sale_id), total, debt, utcnow_str()),
             )
+        return int(sale_id or 0)
 
     async def add_expense(self, user_id: int, item: str, amount: float, comment: str | None):
         await self.db.execute(
@@ -55,14 +88,16 @@ class Repository:
         )
 
     async def add_request(self, user_id: int, name: str, phone: str, comment: str | None) -> int:
-        await self.db.execute(
-            "INSERT INTO requests (user_id, name, phone, comment, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        req_id = await self.db.fetchval(
+            """
+            INSERT INTO requests (user_id, name, phone, comment, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """,
             (user_id, name, phone, comment, "Новая", utcnow_str()),
         )
-        row = await self.db.fetchone("SELECT last_insert_rowid() AS id")
-        req_id = int(row["id"]) if row else 0
         await self._upsert_client(name, phone, comment)
-        return req_id
+        return int(req_id or 0)
 
     async def add_photo(self, owner_type: str, owner_id: int, file_id: str) -> None:
         await self.db.execute(
@@ -72,8 +107,10 @@ class Repository:
 
     async def add_task(self, manager_id: int, assignee_id: int, title: str, due_date: str, comment: str | None):
         await self.db.execute(
-            "INSERT INTO tasks (manager_id, assignee_id, title, due_date, comment, status, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO tasks (manager_id, assignee_id, title, due_date, comment, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             (manager_id, assignee_id, title, due_date, comment, "Новая", utcnow_str()),
         )
 
@@ -92,14 +129,23 @@ class Repository:
     async def get_task(self, task_id: int):
         return await self.db.fetchone("SELECT * FROM tasks WHERE id = ?", (task_id,))
 
-    async def add_material_movement(self, user_id: int, material_id: int, qty: float, action: str, comment: str | None):
+    async def add_material_movement(
+        self,
+        user_id: int,
+        material_id: int,
+        qty: float,
+        action: str,
+        comment: str | None,
+    ):
         await self.db.execute(
             "UPDATE materials SET current_qty = current_qty + ? WHERE id = ?",
             (qty, material_id),
         )
         await self.db.execute(
-            "INSERT INTO material_history (user_id, material_id, qty, action, comment, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO material_history (user_id, material_id, qty, action, comment, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
             (user_id, material_id, qty, action, comment, utcnow_str()),
         )
 
@@ -117,8 +163,10 @@ class Repository:
 
     async def add_personal_task(self, director_id: int, title: str, due_date: str, comment: str | None):
         await self.db.execute(
-            "INSERT INTO personal_tasks (director_id, title, due_date, comment, status, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO personal_tasks (director_id, title, due_date, comment, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
             (director_id, title, due_date, comment, "Новая", utcnow_str()),
         )
 
@@ -147,21 +195,21 @@ class Repository:
         )
 
     async def calc_cash_balance(self):
-        paid_sum = await self.db.fetchone("SELECT COALESCE(SUM(amount_paid),0) AS s FROM sales")
-        expense_sum = await self.db.fetchone("SELECT COALESCE(SUM(amount),0) AS s FROM expenses")
+        paid_sum = await self.db.fetchone("SELECT COALESCE(SUM(amount_paid), 0) AS s FROM sales")
+        expense_sum = await self.db.fetchone("SELECT COALESCE(SUM(amount), 0) AS s FROM expenses")
         return float(paid_sum["s"]) - float(expense_sum["s"])
 
     async def calc_debt_total(self):
-        row = await self.db.fetchone("SELECT COALESCE(SUM(amount_left),0) AS s FROM debts")
+        row = await self.db.fetchone("SELECT COALESCE(SUM(amount_left), 0) AS s FROM debts")
         return float(row["s"]) if row else 0.0
 
     async def calc_today_stats(self, date_str: str):
         sales = await self.db.fetchone(
-            "SELECT COALESCE(SUM(amount_total),0) AS s FROM sales WHERE substr(created_at,1,10) = ?",
+            "SELECT COALESCE(SUM(amount_total), 0) AS s FROM sales WHERE substring(created_at, 1, 10) = ?",
             (date_str,),
         )
         expenses = await self.db.fetchone(
-            "SELECT COALESCE(SUM(amount),0) AS s FROM expenses WHERE substr(created_at,1,10) = ?",
+            "SELECT COALESCE(SUM(amount), 0) AS s FROM expenses WHERE substring(created_at, 1, 10) = ?",
             (date_str,),
         )
         return float(sales["s"]), float(expenses["s"])
@@ -175,7 +223,7 @@ class Repository:
             (debt_id, user_id, amount, comment, utcnow_str()),
         )
         await self.db.execute(
-            "UPDATE debts SET amount_left = amount_left - ? WHERE id = ?",
+            "UPDATE debts SET amount_left = GREATEST(amount_left - ?, 0) WHERE id = ?",
             (amount, debt_id),
         )
         await self.db.execute(
@@ -205,15 +253,16 @@ class Repository:
         deadline_date: str | None,
         responsible_user_id: int | None,
     ) -> int:
-        await self.db.execute(
-            "INSERT INTO orders (name, phone, comment, deadline_date, responsible_user_id, status, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (name, phone, comment, deadline_date, responsible_user_id, "Новый", utcnow_str()),
+        client_id = await self._upsert_client(name, phone, comment)
+        order_id = await self.db.fetchval(
+            """
+            INSERT INTO orders (client_id, name, phone, comment, deadline_date, responsible_user_id, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            """,
+            (client_id, name, phone, comment, deadline_date, responsible_user_id, "Новый", utcnow_str()),
         )
-        row = await self.db.fetchone("SELECT last_insert_rowid() AS id")
-        order_id = int(row["id"]) if row else 0
-        await self._upsert_client(name, phone, comment)
-        return order_id
+        return int(order_id or 0)
 
     async def update_order_status(self, order_id: int, status: str) -> None:
         await self.db.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
@@ -237,7 +286,7 @@ class Repository:
     async def search_clients(self, query: str):
         q = f"%{query}%"
         return await self.db.fetchall(
-            "SELECT * FROM clients WHERE name LIKE ? OR phone LIKE ? ORDER BY id DESC",
+            "SELECT * FROM clients WHERE name ILIKE ? OR phone ILIKE ? ORDER BY id DESC",
             (q, q),
         )
 
@@ -250,6 +299,8 @@ class Repository:
         return reqs, orders
 
     async def delete_all_from(self, table: str) -> None:
+        if table not in ALLOWED_DELETE_TABLES:
+            raise ValueError(f"Deleting from table '{table}' is not allowed")
         await self.db.execute(f"DELETE FROM {table}")
 
     async def delete_all_photos_for(self, owner_type: str):
@@ -282,7 +333,13 @@ class Repository:
     async def update_personal_task_status(self, task_id: int, status: str, reason: str | None = None) -> None:
         completed_at = utcnow_str() if status == "Выполнено" else None
         await self.db.execute(
-            "UPDATE personal_tasks SET status = ?, completed_at = COALESCE(?, completed_at), not_done_reason = ? WHERE id = ?",
+            """
+            UPDATE personal_tasks
+            SET status = ?,
+                completed_at = COALESCE(?, completed_at),
+                not_done_reason = ?
+            WHERE id = ?
+            """,
             (status, completed_at, reason, task_id),
         )
 
@@ -292,19 +349,31 @@ class Repository:
     async def update_task_status(self, task_id: int, status: str, reason: str | None = None) -> None:
         completed_at = utcnow_str() if status == "Выполнено" else None
         await self.db.execute(
-            "UPDATE tasks SET status = ?, completed_at = COALESCE(?, completed_at), not_done_reason = ? WHERE id = ?",
+            """
+            UPDATE tasks
+            SET status = ?,
+                completed_at = COALESCE(?, completed_at),
+                not_done_reason = ?
+            WHERE id = ?
+            """,
             (status, completed_at, reason, task_id),
         )
 
-    async def _upsert_client(self, name: str, phone: str, comment: str | None) -> None:
+    async def _upsert_client(self, name: str, phone: str, comment: str | None) -> int:
         row = await self.get_client_by_phone(phone)
         if row:
             await self.db.execute(
                 "UPDATE clients SET name = ?, comment = ? WHERE id = ?",
                 (name, comment, int(row["id"])),
             )
-            return
-        await self.db.execute(
-            "INSERT INTO clients (name, phone, comment, created_at) VALUES (?, ?, ?, ?)",
+            return int(row["id"])
+
+        client_id = await self.db.fetchval(
+            """
+            INSERT INTO clients (name, phone, comment, created_at)
+            VALUES (?, ?, ?, ?)
+            RETURNING id
+            """,
             (name, phone, comment, utcnow_str()),
         )
+        return int(client_id or 0)

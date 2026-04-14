@@ -8,7 +8,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile, Message
 
 from app.handlers.common import require_director_pin
-from app.keyboards.common import clients_menu, confirm_menu, make_main_menu, manager_menu, materials_menu, orders_menu, tasks_menu
+from app.keyboards.common import (
+    clients_menu as clients_menu_kb,
+    confirm_menu,
+    manager_menu,
+    materials_menu,
+    orders_menu as orders_menu_kb,
+    tasks_menu,
+)
 from app.services import roles
 from app.services.exporter import export_to_xlsx
 from app.states.forms import DeleteStates, MaterialStates, OrderStates, RequestStates, SearchStates, TaskStates
@@ -125,19 +132,19 @@ async def request_photos_add(message: Message, state: FSMContext):
 
 
 @router.message(F.text == "Клиенты")
-async def clients_menu(message: Message, state: FSMContext):
+async def open_clients_menu(message: Message, state: FSMContext):
     if not await _ensure_manager(message, state):
         raise SkipHandler
     await state.update_data(current_menu="clients")
-    await message.answer("Клиенты:", reply_markup=clients_menu())
+    await message.answer("Клиенты:", reply_markup=clients_menu_kb())
 
 
 @router.message(F.text == "Заказы")
-async def orders_menu(message: Message, state: FSMContext):
+async def open_orders_menu(message: Message, state: FSMContext):
     if not await _ensure_manager(message, state):
         raise SkipHandler
     await state.update_data(current_menu="orders")
-    await message.answer("Заказы:", reply_markup=orders_menu())
+    await message.answer("Заказы:", reply_markup=orders_menu_kb())
 
 
 @router.message(F.text == "Задачи")
@@ -533,7 +540,7 @@ async def _finish_order_create(message: Message, state: FSMContext):
         await repo.add_photo("order", order_id, fid)
     await _notify_order_created(message, order_id, data.get("name", ""), data.get("deadline"))
     await state.clear()
-    await message.answer(f"Заказ создан (ID {order_id}).", reply_markup=orders_menu())
+    await message.answer(f"Заказ создан (ID {order_id}).", reply_markup=orders_menu_kb())
 
 
 async def _notify_order_created(message: Message, order_id: int, name: str, deadline: str | None) -> None:
@@ -719,6 +726,6 @@ async def clear_confirm(message: Message, state: FSMContext):
     elif section == "tasks":
         await message.answer("Раздел очищен.", reply_markup=tasks_menu())
     elif section == "clients":
-        await message.answer("Раздел очищен.", reply_markup=clients_menu())
+        await message.answer("Раздел очищен.", reply_markup=clients_menu_kb())
     elif section == "orders":
-        await message.answer("Раздел очищен.", reply_markup=orders_menu())
+        await message.answer("Раздел очищен.", reply_markup=orders_menu_kb())
