@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 from aiogram import F, Router
-from aiogram.exceptions import SkipHandler
+from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.fsm.context import FSMContext
 from aiogram.types import FSInputFile, Message
 
